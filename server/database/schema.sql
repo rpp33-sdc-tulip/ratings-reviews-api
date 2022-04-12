@@ -12,7 +12,7 @@ CREATE TABLE reviews (
   body VARCHAR(1000),
   review_date CHAR(27),
   reviewer_name CHAR(60),
-  helpfulness INT,
+  helpfulness INT NOT NULL DEFAULT 0,
   email CHAR(60),
   reported BOOLEAN DEFAULT false
 );

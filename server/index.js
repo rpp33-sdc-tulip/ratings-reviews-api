@@ -2,6 +2,7 @@
 
 const express = require('express');
 const mysql = require('mysql');
+const cors = require('cors');
 const { insertQueryCharacteristics } = require('./database/utilities/helpers');
 const { insertQueryPhotos } = require('./database/utilities/helpers');
 
@@ -22,6 +23,8 @@ connection.connect((error) => {
 });
 
 app.use(express.json());
+app.use(express.urlencoded());
+app.use(cors());
 
 app.get('/reviews/', (req, res) => {
   const results = {
@@ -30,24 +33,57 @@ app.get('/reviews/', (req, res) => {
     count: req.query.count || 5,
   };
   const productId = Number(results.product);
-  const query = `SELECT R.id AS review_id, R.rating, R.summary, R.recommend, R.response, R.body, R.review_date AS date, R.reviewer_name, R.helpfulness, JSON_ARRAYAGG(JSON_OBJECT('id', P.id, 'url', P.photoURL)) AS photos
-    FROM reviews R LEFT JOIN photos P ON R.id=P.review_id WHERE R.product_id=${productId} AND R.reported=0
-    GROUP BY R.id LIMIT ${results.count * (results.page - 1)}, ${results.count}`;
-  connection.query(query, (err, reviews) => {
+  const query = `SELECT R.id AS review_id,
+      R.rating,
+      R.summary,
+      R.recommend,
+      R.response,
+      R.body,
+      R.review_date AS date,
+      R.reviewer_name,
+      R.helpfulness,
+      IF(COUNT(P.id)=0, JSON_ARRAY(), (SELECT JSON_ARRAYAGG(
+        (SELECT JSON_OBJECT(
+          'id',
+          P.id,
+          'url',
+          P.photoURL
+        )
+        FROM reviews R
+        LEFT JOIN photos P ON R.id=P.review_id
+        WHERE R.product_id=${productId} AND R.reported=0 AND P.id IS NOT NULL AND p.photoUrl IS NOT NULL)
+      )
+    )) AS photos
+    FROM reviews R
+    LEFT JOIN photos P ON R.id=P.review_id
+    WHERE R.product_id=${productId} AND R.reported=0
+    GROUP BY R.id
+    LIMIT ${results.count * (results.page - 1)}, ${results.count}`;
+  connection.query(query, (err, result) => {
     if (err) {
       throw err;
     }
-    results.results = reviews;
+    const reviews = result;
+    if (reviews) {
+      for (let i = 0; i < reviews.length; i += 1) {
+        if (reviews[i].photos) {
+          reviews[i].photos = JSON.parse(reviews[i].photos);
+        }
+      }
+      results.results = reviews;
+    }
     res.send(results);
   });
 });
 
 app.get('/reviews/meta', (req, res) => {
-  const results = {
-    product: req.body.product_id,
-  };
-  const productId = Number(results.product);
+  const productId = Number(req.query.product_id);
   const query = `SELECT
+    (SELECT product_id
+      FROM reviews
+      WHERE product_id=${productId}
+      LIMIT 1)
+      AS product_id,
     (SELECT JSON_OBJECT(
       '1',
       (SELECT COUNT(rating)
@@ -71,33 +107,30 @@ app.get('/reviews/meta', (req, res) => {
         FROM reviews
         WHERE rating=5 AND product_id=${productId})
     )) AS ratings,
-    (SELECT JSON_OBJECT
-      (
-        '0',
-        (SELECT COUNT(recommend)
-          FROM reviews
-          WHERE recommend=0 AND product_id=${productId}),
-        '1',
-        (SELECT COUNT(recommend)
-          FROM reviews
-          WHERE recommend=1 AND product_id=${productId})
-      ))
-      AS recommended,
-    (SELECT GROUP_CONCAT(
-        C.characteristic,
-        JSON_OBJECT
-          (
-            'id',
-            C.id,
-            'value',
-            (SELECT AVG(RC.characteristicValue)
-            FROM reviews R
-            INNER JOIN reviews_characteristics RC ON R.id=RC.review_id
-            INNER JOIN characteristics C ON RC.characteristic_id=C.id
-            WHERE R.product_id=${productId})
-          )
+    (SELECT JSON_OBJECT(
+      'false',
+      (SELECT COUNT(recommend)
+        FROM reviews
+        WHERE recommend=0 AND product_id=${productId}),
+      'true',
+      (SELECT COUNT(recommend)
+        FROM reviews
+        WHERE recommend=1 AND product_id=${productId})
       )
-      FROM characteristics C
+    ) AS recommended,
+    (SELECT JSON_OBJECT(
+        C.characteristic,
+        JSON_OBJECT(
+          'id',
+          C.id,
+          'value',
+          (SELECT AVG(RC.characteristicValue)
+          FROM reviews R
+          INNER JOIN reviews_characteristics RC ON R.id=RC.review_id
+          INNER JOIN characteristics C ON RC.characteristic_id=C.id
+          WHERE R.product_id=${productId})
+        )
+      ) FROM characteristics C
       WHERE C.product_id=${productId}
     ) AS characteristics
     ;`;
@@ -105,69 +138,18 @@ app.get('/reviews/meta', (req, res) => {
     if (err) {
       throw err;
     }
-    res.send(result);
+    const data = result;
+    data[0].ratings = JSON.parse(data[0].ratings);
+    data[0].recommended = JSON.parse(data[0].recommended);
+    data[0].characteristics = JSON.parse(data[0].characteristics);
+    res.send(data[0]);
   });
 });
 
-// const query = `SELECT
-//     (SELECT JSON_OBJECT(
-//       '1',
-//       (SELECT COUNT(rating)
-//         FROM reviews
-//         WHERE rating=1 AND product_id=${productId}),
-//       '2',
-//       (SELECT COUNT(rating)
-//         FROM reviews
-//         WHERE rating=2
-//         AND product_id=${productId}),
-//       '3',
-//       (SELECT COUNT(rating)
-//         FROM reviews
-//         WHERE rating=3 AND product_id=${productId}),
-//       '4',
-//       (SELECT COUNT(rating)
-//         FROM reviews
-//         WHERE rating=4 AND product_id=${productId}),
-//       '5',
-//       (SELECT COUNT(rating)
-//         FROM reviews
-//         WHERE rating=5 AND product_id=${productId})
-//     )) AS ratings,
-//     (SELECT JSON_OBJECT
-//       (
-//         '0',
-//         (SELECT COUNT(recommend)
-//           FROM reviews
-//           WHERE recommend=0 AND product_id=${productId}),
-//         '1',
-//         (SELECT COUNT(recommend)
-//           FROM reviews
-//           WHERE recommend=1 AND product_id=${productId})
-//       ))
-//       AS recommended,
-//     (SELECT GROUP_CONCAT(
-//         C.characteristic,
-//         JSON_OBJECT
-//           (
-//             'id',
-//             C.id,
-//             'value',
-//             '0'
-//           )
-//       )
-//       FROM characteristics C
-//       WHERE C.product_id=${productId}
-//     ) AS characteristics
-//     ;`;
-//   FROM reviews R
-//   INNER JOIN reviews_characteristics RC ON R.id=RC.review_id
-//   INNER JOIN characteristics C ON RC.characteristic_id=C.id
-//   WHERE R.product_id=${productId})
-//   AS characteristics
-
 app.post('/reviews', (req, res) => {
   req.body.date = new Date().toISOString();
-  const reviewQuery = `INSERT INTO reviews (product_id, rating, summary, body, recommend, review_date, reviewer_name, email) VALUES (${Number(req.body.product_id)}, ${Number(req.body.rating)}, "${req.body.summary}", "${req.body.body}", ${req.body.recommend}, "${req.body.date}", "${req.body.name}", "${req.body.email}");`;
+  const reviewQuery = `INSERT INTO reviews (product_id, rating, summary, body, recommend, review_date, reviewer_name, email)
+    VALUES (${Number(req.body.product_id)}, ${Number(req.body.rating)}, "${req.body.summary}", "${req.body.body}", ${req.body.recommend}, "${req.body.date}", "${req.body.name}", "${req.body.email}");`;
   connection.query(reviewQuery, (err, results) => {
     if (err) {
       throw err;
@@ -193,7 +175,9 @@ app.post('/reviews', (req, res) => {
 });
 
 app.put('/reviews/:review_id/helpful', (req, res) => {
-  const query = `UPDATE reviews SET helpfulness=helpfulness+1 WHERE id=${req.params.review_id}`;
+  const query = `UPDATE reviews
+    SET helpfulness=helpfulness+1
+    WHERE id=${req.body.review_id}`;
   connection.query(query, (err) => {
     if (err) {
       throw err;
@@ -203,7 +187,9 @@ app.put('/reviews/:review_id/helpful', (req, res) => {
 });
 
 app.put('/reviews/:review_id/report', (req, res) => {
-  const query = `UPDATE reviews SET reported=1 WHERE id=${req.params.review_id}`;
+  const query = `UPDATE reviews
+  SET reported=1
+  WHERE id=${req.body.review_id}`;
   connection.query(query, (err) => {
     if (err) {
       throw err;
