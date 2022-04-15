@@ -1,4 +1,4 @@
-function insertQueryPhotos(reviewId, photos) {
+const insertQueryPhotos = (reviewId, photos) => {
   let query = 'INSERT INTO photos (review_id, photoUrl) VALUES ';
   for (let i = 0; i < photos.length; i += 1) {
     if (i === photos.length - 1) {
