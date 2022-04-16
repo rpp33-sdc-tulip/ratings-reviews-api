@@ -4,7 +4,7 @@ USE reviews;
 
 CREATE TABLE reviews (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  product_id CHAR(12),
+  product_id INT,
   rating TINYINT,
   summary CHAR(60),
   recommend BOOLEAN,
@@ -14,7 +14,8 @@ CREATE TABLE reviews (
   reviewer_name CHAR(60),
   helpfulness INT NOT NULL DEFAULT 0,
   email CHAR(60),
-  reported BOOLEAN DEFAULT false
+  reported BOOLEAN DEFAULT false,
+  INDEX (product_id)
 );
 
 CREATE TABLE photos (
@@ -27,7 +28,8 @@ CREATE TABLE photos (
 CREATE TABLE characteristics (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   product_id INT,
-  characteristic CHAR(10)
+  characteristic CHAR(10),
+  INDEX (product_id)
 );
 
 CREATE TABLE reviews_characteristics (
