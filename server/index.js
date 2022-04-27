@@ -1,5 +1,6 @@
 /* eslint no-shadow: ["error", { "allow": ["err"] }] */
 
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql');
 const cors = require('cors');
@@ -10,8 +11,9 @@ const app = express();
 const port = 8080;
 
 const connection = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
+  host: process.env.HOST || 'localhost',
+  user: 'sdc',
+  password: process.env.PASSWORD || '',
   database: 'reviews',
 });
 
@@ -85,34 +87,33 @@ app.get('/reviews/meta', (req, res) => {
     '1',
     (SELECT COUNT(rating)
       FROM reviews
-      WHERE rating=1 AND product_id=${productId}),
+      WHERE rating=1 AND product_id=${productId} AND reported=0),
     '2',
     (SELECT COUNT(rating)
       FROM reviews
-      WHERE rating=2
-      AND product_id=${productId}),
+      WHERE rating=2 AND product_id=${productId} AND reported=0),
     '3',
     (SELECT COUNT(rating)
       FROM reviews
-      WHERE rating=3 AND product_id=${productId}),
+      WHERE rating=3 AND product_id=${productId} AND reported=0),
     '4',
     (SELECT COUNT(rating)
       FROM reviews
-      WHERE rating=4 AND product_id=${productId}),
+      WHERE rating=4 AND product_id=${productId} AND reported=0),
     '5',
     (SELECT COUNT(rating)
       FROM reviews
-      WHERE rating=5 AND product_id=${productId})
+      WHERE rating=5 AND product_id=${productId} AND reported=0)
   )) AS ratings,
   (SELECT JSON_OBJECT(
     'false',
     (SELECT COUNT(recommend)
       FROM reviews
-      WHERE recommend=0 AND product_id=${productId}),
+      WHERE recommend=0 AND product_id=${productId} AND reported=0),
     'true',
     (SELECT COUNT(recommend)
       FROM reviews
-      WHERE recommend=1 AND product_id=${productId})
+      WHERE recommend=1 AND product_id=${productId} AND reported=0)
     )
   ) AS recommended,
   (SELECT JSON_OBJECTAGG(
@@ -125,7 +126,7 @@ app.get('/reviews/meta', (req, res) => {
         FROM reviews R
         INNER JOIN reviews_characteristics RC ON R.id=RC.review_id
         INNER JOIN characteristics C ON RC.characteristic_id=C.id
-        WHERE R.product_id=${productId})
+        WHERE R.product_id=${productId} AND R.reported=0)
       )
     ) FROM characteristics C
     WHERE C.product_id=${productId}
@@ -151,6 +152,9 @@ app.post('/reviews', (req, res) => {
     if (err) {
       throw err;
     }
+    if (typeof req.body.characteristics === 'string') {
+      req.body.characteristics = JSON.parse(req.body.characteristics);
+    }
     const characteristicQuery = `${insertQueryCharacteristics(results.insertId, req.body.characteristics)}`;
     connection.query(characteristicQuery, (err) => {
       if (err) {
@@ -174,7 +178,7 @@ app.post('/reviews', (req, res) => {
 app.put('/reviews/:review_id/helpful', (req, res) => {
   const query = `UPDATE reviews
     SET helpfulness=helpfulness+1
-    WHERE id=${req.body.review_id}`;
+    WHERE id=${req.params.review_id}`;
   connection.query(query, (err) => {
     if (err) {
       throw err;
@@ -186,7 +190,7 @@ app.put('/reviews/:review_id/helpful', (req, res) => {
 app.put('/reviews/:review_id/report', (req, res) => {
   const query = `UPDATE reviews
   SET reported=1
-  WHERE id=${req.body.review_id}`;
+  WHERE id=${req.params.review_id}`;
   connection.query(query, (err) => {
     if (err) {
       throw err;

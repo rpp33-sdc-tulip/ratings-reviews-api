@@ -8,7 +8,7 @@ const insertQueryPhotos = (reviewId, photos) => {
     }
   }
   return query;
-}
+};
 
 const insertQueryCharacteristics = (reviewId, characteristics) => {
   let query = 'INSERT INTO reviews_characteristics (review_id, characteristic_id, characteristicValue) VALUES ';
