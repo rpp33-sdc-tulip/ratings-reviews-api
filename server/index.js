@@ -1,5 +1,6 @@
 /* eslint no-shadow: ["error", { "allow": ["err"] }] */
 
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql');
 const cors = require('cors');
@@ -10,8 +11,9 @@ const app = express();
 const port = 8080;
 
 const connection = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
+  host: process.env.HOST || 'localhost',
+  user: 'sdc',
+  password: process.env.PASSWORD || '',
   database: 'reviews',
 });
 
