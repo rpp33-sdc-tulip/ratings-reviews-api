@@ -103,6 +103,9 @@ dist
 # TernJS port file
 .tern-port
 
-#merged data files
+# merged data files
 dataETL/
 fec
+
+# testing scripts
+script.js
